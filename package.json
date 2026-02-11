@@ -1,0 +1,18 @@
+{
+  "name": "chess-decision-support-backend",
+  "version": "1.0.0",
+  "description": "Backend for Chess Decision Support System - Minimax, Payoff Matrix, Game Theory",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "chess.js": "^1.0.0-beta.8",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
