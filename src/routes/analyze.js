@@ -15,7 +15,6 @@ function analyzeHandler(req, res) {
   } catch (e) {
     return res.status(400).json({ error: 'Invalid FEN string.' });
   }
-  // Check terminal state BEFORE calculating moves; return winner/draw and score so UI can show 100% for winner.
   const turn = game.turn();
   if (game.isCheckmate()) {
     const winner = turn === 'w' ? 'b' : 'w';
