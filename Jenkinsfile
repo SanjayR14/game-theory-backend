@@ -104,7 +104,7 @@ pipeline {
         stage('Push GitOps Changes') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'github-pat',
+                    credentialsId: 'github-creds',
                     usernameVariable: 'GIT_USER',
                     passwordVariable: 'GIT_TOKEN'
                 )]) {
