@@ -43,11 +43,16 @@ pipeline {
             }
         }
 
-        stage('Trivy Scan') {
-            steps {
-                sh 'trivy image node-app:v1'
-            }
+       stage('Trivy Scan') {
+        steps {
+            sh '''
+            trivy image \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              node-app:v1
+            '''
         }
+    }
 
       stage('Docker Login') {
             steps {
