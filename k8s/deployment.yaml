@@ -19,8 +19,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: YOUR_DOCKER_USERNAME/node-app:v1
-
+        image: 851218292096.dkr.ecr.ap-south-1.amazonaws.com/game-theory-backend:v1
         imagePullPolicy: Always
 
         ports:
