@@ -1,16 +1,16 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs "Node18"
+    }
+
     environment {
         AWS_ACCOUNT_ID = "851218292096"
         AWS_REGION = "ap-south-1"
         ECR_REPO = "game-theory-backend"
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        IMAGE_NAME = "game-theory-backend"
         GITOPS_REPO = "https://github.com/SanjayR14/game-theory-gitops.git"
-    }
-
-    tools {
-        nodejs "Node18"
     }
 
     stages {
@@ -18,7 +18,7 @@ pipeline {
         stage('Checkout Source') {
             steps {
                 git branch: 'main',
-                url: 'https://github.com/SanjayR14/game-theory-backend.git'
+                    url: 'https://github.com/SanjayR14/game-theory-backend.git'
             }
         }
 
@@ -28,21 +28,21 @@ pipeline {
             }
         }
 
-        stage('Trivy Scan') {
+        stage('Build Docker Image') {
             steps {
                 sh '''
-                trivy image \
-                --scanners vuln \
-                --severity HIGH,CRITICAL \
-                node-app:${IMAGE_TAG} || true
+                docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
                 '''
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Trivy Scan') {
             steps {
                 sh '''
-                docker build -t node-app:${IMAGE_TAG} .
+                trivy image \
+                --severity HIGH,CRITICAL \
+                --scanners vuln \
+                ${IMAGE_NAME}:${BUILD_NUMBER}
                 '''
             }
         }
@@ -54,28 +54,29 @@ pipeline {
                     credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
-                    aws ecr get-login-password --region $AWS_REGION | \
-                    docker login --username AWS \
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                    docker login \
+                    --username AWS \
                     --password-stdin \
-                    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+                    ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
                     '''
                 }
             }
         }
 
-        stage('Push Image to ECR') {
+        stage('Push Image to Amazon ECR') {
             steps {
                 sh '''
-                docker tag node-app:${IMAGE_TAG} \
-                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:${IMAGE_TAG}
+                docker tag ${IMAGE_NAME}:${BUILD_NUMBER} \
+                ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${BUILD_NUMBER}
 
                 docker push \
-                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:${IMAGE_TAG}
+                ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${BUILD_NUMBER}
                 '''
             }
         }
 
-        stage('Update GitOps Repository') {
+        stage('Clone GitOps Repository') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'github-pat',
@@ -87,17 +88,38 @@ pipeline {
                     rm -rf gitops
 
                     git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/SanjayR14/game-theory-gitops.git gitops
+                    '''
+                }
+            }
+        }
 
+        stage('Update Deployment YAML') {
+            steps {
+                sh '''
+                sed -i "s|image:.*|image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${BUILD_NUMBER}|" gitops/deployment.yaml
+                '''
+            }
+        }
+
+        stage('Push GitOps Changes') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-pat',
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )]) {
+
+                    sh '''
                     cd gitops
-
-                    sed -i "s|image:.*|image: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:${IMAGE_TAG}|" deployment.yaml
 
                     git config user.email "jenkins@example.com"
                     git config user.name "Jenkins"
 
                     git add deployment.yaml
-                    git commit -m "Update image to ${IMAGE_TAG}" || true
-                    git push origin main
+
+                    git commit -m "Update image to build ${BUILD_NUMBER}" || true
+
+                    git push https://${GIT_USER}:${GIT_TOKEN}@github.com/SanjayR14/game-theory-gitops.git HEAD:main
                     '''
                 }
             }
@@ -105,12 +127,24 @@ pipeline {
     }
 
     post {
+
         success {
-            echo "Deployment completed successfully!"
+            echo "========================================"
+            echo "Build Successful!"
+            echo "Image pushed to Amazon ECR"
+            echo "GitOps repository updated"
+            echo "Argo CD will automatically sync"
+            echo "========================================"
         }
 
         failure {
-            echo "Pipeline failed!"
+            echo "========================================"
+            echo "Pipeline Failed!"
+            echo "========================================"
+        }
+
+        always {
+            sh 'docker image prune -f'
         }
     }
 }
